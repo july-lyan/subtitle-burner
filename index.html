@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>字幕烧录</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, "PingFang SC", sans-serif; background: #1a1a2e; color: #eee; padding: 20px; }
+
+h1 { text-align: center; font-size: 20px; margin-bottom: 4px; }
+.tip { text-align: center; color: #888; font-size: 12px; margin-bottom: 20px; }
+
+.container { max-width: 800px; margin: 0 auto; }
+
+
+/* 状态条 */
+.status-bar { padding: 10px 16px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; display: none; }
+.status-bar.processing { background: #1a1a3e; border: 1px solid #6c5ce7; color: #aaa; display: block; }
+.status-bar.done { background: #0d2e1e; border: 1px solid #00d4aa; color: #00d4aa; display: block; }
+.status-bar.error { background: #2e0d0d; border: 1px solid #e74c3c; color: #e74c3c; display: block; }
+.spinner { display: inline-block; width: 10px; height: 10px; border: 2px solid #6c5ce7; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 按钮 */
+.btn { padding: 8px 20px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-green { background: #00d4aa; color: #1a1a2e; }
+.btn-green:disabled { background: #1a5a4e; color: #555; cursor: not-allowed; }
+.btn-purple { background: #6c5ce7; color: #fff; }
+.btn-purple:disabled { background: #2d2560; color: #555; cursor: not-allowed; }
+.btn-gray { background: #333; color: #ddd; }
+.btn-red { background: #c0392b; color: #fff; }
+.btn-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+
+/* 字幕列表 */
+.subs-panel { background: #16213e; border-radius: 10px; padding: 16px; display: none; }
+.subs-panel h3 { font-size: 14px; color: #6c5ce7; margin-bottom: 12px; }
+.sub-count { color: #888; font-size: 12px; margin-left: 8px; }
+
+.sub-item { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; border-bottom: 1px solid #1e2d50; }
+.sub-item:last-child { border-bottom: none; }
+.sub-time { color: #6c5ce7; font-size: 11px; white-space: nowrap; width: 120px; flex-shrink: 0; padding-top: 6px; }
+.sub-text { flex: 1; }
+.sub-text input { width: 100%; background: #0f1a33; border: 1px solid #2a3a5e; color: #eee; padding: 5px 8px; border-radius: 4px; font-size: 13px; font-family: inherit; }
+.sub-text input:focus { outline: none; border-color: #6c5ce7; }
+.sub-del { background: none; border: none; color: #555; cursor: pointer; font-size: 16px; padding: 4px; flex-shrink: 0; }
+.sub-del:hover { color: #e74c3c; }
+
+/* 样式配置 */
+.style-panel { background: #16213e; border-radius: 10px; padding: 16px; margin-top: 14px; display: none; }
+.style-panel h3 { font-size: 13px; color: #6c5ce7; margin-bottom: 12px; }
+.style-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.style-label { font-size: 12px; color: #888; width: 80px; flex-shrink: 0; }
+.style-row input[type=range] { flex: 1; accent-color: #6c5ce7; }
+.style-val { font-size: 12px; color: #eee; width: 40px; text-align: right; }
+
+/* 完成提示 */
+.done-banner { background: #0d2e1e; border: 1px solid #00d4aa; border-radius: 8px; padding: 14px 18px; margin-top: 16px; display: none; }
+.done-banner .path { font-size: 12px; color: #00d4aa; margin-top: 4px; word-break: break-all; }
+</style>
+</head>
+<body>
+
+<h1>字幕烧录</h1>
+<p class="tip">粘贴视频路径 → 自动转写字幕 → 手动修改错词 → 一键烧录</p>
+
+<div class="container">
+
+  <!-- 文件选择 -->
+  <div style="margin-bottom:16px">
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">
+      <button class="btn btn-purple" style="font-size:15px;padding:10px 24px" onclick="pickFile()">选择视频文件</button>
+      <span id="fileNameDisplay" style="color:#888;font-size:13px">未选择文件</span>
+    </div>
+    <input type="text" id="pathInput" placeholder="或手动粘贴路径，回车开始"
+      style="width:100%;background:#0f1a33;border:1px solid #1a2a4e;color:#666;padding:8px 12px;border-radius:6px;font-size:12px;font-family:inherit;outline:none"
+      oninput="onPathInput(this.value)"
+      onkeydown="if(event.key==='Enter') startTranscribe()"
+      onfocus="this.style.borderColor='#6c5ce7'" onblur="this.style.borderColor='#1a2a4e'">
+  </div>
+
+  <!-- 操作按钮 -->
+  <div class="btn-row">
+    <button class="btn btn-purple" id="btnTranscribe" onclick="startTranscribe()">转写字幕</button>
+    <button class="btn btn-green" id="btnBurn" disabled onclick="startBurn()">烧录字幕</button>
+    <span style="color:#555;font-size:12px" id="hintText"></span>
+  </div>
+
+  <!-- 状态条 -->
+  <div class="status-bar" id="statusBar"></div>
+
+  <!-- 字幕样式配置（放在字幕列表上方） -->
+  <div class="style-panel" id="stylePanel">
+    <h3>字幕样式</h3>
+    <div class="style-row">
+      <span class="style-label">字号</span>
+      <input type="range" min="28" max="80" value="48" oninput="document.getElementById('vFontSize').textContent=this.value" id="sFontSize">
+      <span class="style-val" id="vFontSize">48</span>
+    </div>
+    <div class="style-row">
+      <span class="style-label">背景透明度</span>
+      <input type="range" min="0" max="100" value="70" oninput="document.getElementById('vBgAlpha').textContent=this.value+'%'" id="sBgAlpha">
+      <span class="style-val" id="vBgAlpha">70%</span>
+    </div>
+    <div class="style-row">
+      <span class="style-label">垂直位置</span>
+      <input type="range" min="50" max="97" value="86" oninput="document.getElementById('vSubY').textContent=this.value+'%'" id="sSubY">
+      <span class="style-val" id="vSubY">86%</span>
+    </div>
+    <div style="font-size:11px;color:#444;margin-top:4px">垂直位置：距顶部百分比，86% 约在底部偏上</div>
+  </div>
+
+  <!-- 字幕列表 -->
+  <div class="subs-panel" id="subsPanel">
+    <h3>字幕列表 <span class="sub-count" id="subCount"></span></h3>
+    <div id="subsList"></div>
+  </div>
+
+  <!-- 完成提示 -->
+  <div class="done-banner" id="doneBanner">
+    <div>✅ 烧录完成！</div>
+    <div class="path" id="outputPath"></div>
+  </div>
+
+</div>
+
+<script>
+const SERVER = 'http://localhost:7891';
+let videoPath = '';
+let segments = [];
+let pollTimer = null;
+
+async function pickFile() {
+  try {
+    const res = await fetch(`${SERVER}/pick-file`);
+    const data = await res.json();
+    if (data.path) {
+      videoPath = data.path;
+      document.getElementById('pathInput').value = data.path;
+      const name = data.path.split('/').pop();
+      document.getElementById('fileNameDisplay').textContent = name;
+      document.getElementById('fileNameDisplay').style.color = '#00d4aa';
+      // 自动开始转写
+      startTranscribe();
+    }
+  } catch(e) {
+    alert('连不上服务，请先启动 server.py');
+  }
+}
+
+function onPathInput(val) {
+  videoPath = val.trim();
+  if (val.trim()) {
+    const name = val.trim().split('/').pop();
+    document.getElementById('fileNameDisplay').textContent = name;
+    document.getElementById('fileNameDisplay').style.color = '#888';
+  }
+}
+
+// ─── 转写 ─────────────────────────────────────────────
+async function startTranscribe() {
+  videoPath = document.getElementById('pathInput').value.trim();
+  if (!videoPath) { alert('请先填写视频路径'); return; }
+  document.getElementById('btnTranscribe').disabled = true;
+  document.getElementById('btnBurn').disabled = true;
+  document.getElementById('doneBanner').style.display = 'none';
+  showStatus('processing', '转写中...');
+  setHint('');
+
+  try {
+    await fetch(`${SERVER}/burn-transcribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ video_path: videoPath }),
+    });
+    pollBurnStatus('transcribe');
+  } catch(e) {
+    showStatus('error', '连不上服务，请先启动 server.py');
+  }
+}
+
+function pollBurnStatus(mode) {
+  clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    try {
+      const res = await fetch(`${SERVER}/burn-status`);
+      const data = await res.json();
+      showStatus(data.state === 'done' ? 'done' : data.state === 'error' ? 'error' : 'processing', data.message);
+
+      if (data.state === 'done') {
+        clearInterval(pollTimer);
+        if (mode === 'transcribe' && data.segments) {
+          segments = data.segments;
+          renderSubsList();
+          document.getElementById('btnTranscribe').disabled = false;
+          document.getElementById('btnBurn').disabled = false;
+          setHint('确认字幕后点「烧录字幕」');
+        } else if (mode === 'burn' && data.output) {
+          document.getElementById('outputPath').textContent = data.output;
+          document.getElementById('doneBanner').style.display = 'block';
+          document.getElementById('btnTranscribe').disabled = false;
+          document.getElementById('btnBurn').disabled = false;
+          setHint('完成！');
+        }
+      } else if (data.state === 'error') {
+        clearInterval(pollTimer);
+        document.getElementById('btnTranscribe').disabled = false;
+        document.getElementById('btnBurn').disabled = false;
+      }
+    } catch(e) {}
+  }, 1500);
+}
+
+// ─── 字幕列表渲染 ──────────────────────────────────────
+function renderSubsList() {
+  const panel = document.getElementById('subsPanel');
+  const list = document.getElementById('subsList');
+  document.getElementById('subCount').textContent = `共 ${segments.length} 句`;
+  panel.style.display = 'block';
+  document.getElementById('stylePanel').style.display = 'block';
+
+  list.innerHTML = segments.map((seg, i) => `
+    <div class="sub-item" id="sub-${i}">
+      <div class="sub-time">${fmtTime(seg.start)} → ${fmtTime(seg.end)}</div>
+      <div class="sub-text">
+        <input type="text" value="${escHtml(seg.text)}" oninput="segments[${i}].text=this.value">
+      </div>
+      <button class="sub-del" onclick="deleteSeg(${i})" title="删除这句">×</button>
+    </div>
+  `).join('');
+}
+
+function deleteSeg(i) {
+  document.getElementById(`sub-${i}`).remove();
+  segments.splice(i, 1);
+  // 重新渲染保证 index 一致
+  renderSubsList();
+  document.getElementById('subCount').textContent = `共 ${segments.length} 句`;
+}
+
+function fmtTime(sec) {
+  const m = Math.floor(sec / 60);
+  const s = (sec % 60).toFixed(1);
+  return `${m}:${String(s).padStart(4, '0')}`;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── 烧录 ─────────────────────────────────────────────
+async function startBurn() {
+  if (!videoPath || !segments.length) return;
+  // 同步 input 值到 segments，并去掉标点符号
+  const puncts = /[，。！？,!?…、；;：:""''「」（）()《》【】\[\]]/g;
+  document.querySelectorAll('#subsList input').forEach((inp, i) => {
+    if (segments[i]) segments[i].text = inp.value.replace(puncts, '');
+  });
+
+  document.getElementById('btnBurn').disabled = true;
+  document.getElementById('btnTranscribe').disabled = true;
+  document.getElementById('doneBanner').style.display = 'none';
+  showStatus('processing', '烧录中，请稍等...');
+
+  try {
+    const style = {
+      font_size: parseInt(document.getElementById('sFontSize').value),
+      bg_alpha: parseInt(document.getElementById('sBgAlpha').value),
+      sub_y_pct: parseInt(document.getElementById('sSubY').value) / 100,
+    };
+    await fetch(`${SERVER}/burn-render`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ video_path: videoPath, segments, style }),
+    });
+    pollBurnStatus('burn');
+  } catch(e) {
+    showStatus('error', '连不上服务');
+  }
+}
+
+// ─── 工具 ─────────────────────────────────────────────
+function showStatus(type, msg) {
+  const bar = document.getElementById('statusBar');
+  bar.className = `status-bar ${type}`;
+  bar.innerHTML = type === 'processing'
+    ? `<span class="spinner"></span>${msg}`
+    : msg;
+}
+
+function setHint(msg) {
+  document.getElementById('hintText').textContent = msg;
+}
+</script>
+</body>
+</html>

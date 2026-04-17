@@ -1,0 +1,5 @@
+faster-whisper>=1.0.0
+moviepy>=2.0.0
+Pillow>=10.0.0
+imageio-ffmpeg>=0.5.1
+numpy
