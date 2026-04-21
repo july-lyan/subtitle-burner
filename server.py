@@ -168,7 +168,7 @@ def _burn_render(video_path, segments, style=None):
         import json as _json, shutil
 
         FONT_SIZE = int(style.get("font_size", 48))
-        BG_ALPHA = int(style.get("bg_alpha", 70))
+        BG_ALPHA = int(style.get("bg_alpha", 40))
         SUB_Y_PCT = style.get("sub_y_pct", 0.86)
 
         # 探测视频分辨率
