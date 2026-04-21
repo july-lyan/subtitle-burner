@@ -129,7 +129,10 @@ let videoPath = '';
 let segments = [];
 let pollTimer = null;
 
+let picking = false;
 async function pickFile() {
+  if (picking) return;
+  picking = true;
   try {
     const res = await fetch(`${SERVER}/pick-file`);
     const data = await res.json();
@@ -144,6 +147,8 @@ async function pickFile() {
     }
   } catch(e) {
     alert('连不上服务，请先启动 server.py');
+  } finally {
+    picking = false;
   }
 }
 
