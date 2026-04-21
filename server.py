@@ -34,6 +34,32 @@ def _burn_transcribe(video_path):
     """后台线程：Whisper 转写视频，返回 segments"""
     global burn_state
     try:
+        # 检查是否有缓存的 SRT，有则直接加载跳过 Whisper
+        srt_path = os.path.splitext(video_path)[0] + ".srt"
+        if os.path.exists(srt_path):
+            import re
+            segments = []
+            with open(srt_path, encoding="utf-8") as f:
+                for block in re.split(r"\n\n+", f.read().strip()):
+                    lines = block.strip().splitlines()
+                    if len(lines) < 3:
+                        continue
+                    m = re.match(r"(\S+) --> (\S+)", lines[1])
+                    if not m:
+                        continue
+                    def _parse_ts(ts):
+                        h, rest = ts.split(":", 1)
+                        mi, rest = rest.split(":", 1)
+                        s, ms = rest.split(",")
+                        return int(h)*3600 + int(mi)*60 + int(s) + int(ms)/1000
+                    segments.append({
+                        "start": round(_parse_ts(m.group(1)), 2),
+                        "end": round(_parse_ts(m.group(2)), 2),
+                        "text": " ".join(lines[2:]),
+                    })
+            burn_state = {"state": "done", "message": f"从缓存加载，共 {len(segments)} 句", "segments": segments, "srt_path": srt_path}
+            return
+
         burn_state = {"state": "processing", "message": "提取音频..."}
         tmpdir = tempfile.mkdtemp(prefix="burn_")
         audio_path = os.path.join(tmpdir, "audio.wav")
