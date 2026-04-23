@@ -80,6 +80,11 @@ h1 { text-align: center; font-size: 20px; margin-bottom: 4px; }
 
   <!-- 操作按钮 -->
   <div class="btn-row">
+    <select id="langSelect" style="background:#0f1a33;border:1px solid #2a3a5e;color:#eee;padding:6px 10px;border-radius:6px;font-size:13px;outline:none">
+      <option value="zh">中文</option>
+      <option value="en">English</option>
+      <option value="ja">日本語</option>
+    </select>
     <button class="btn btn-purple" id="btnTranscribe" onclick="startTranscribe()">转写字幕</button>
     <button class="btn btn-green" id="btnBurn" disabled onclick="startBurn()">烧录字幕</button>
     <span style="color:#555;font-size:12px" id="hintText"></span>
@@ -172,10 +177,11 @@ async function startTranscribe() {
   setHint('');
 
   try {
+    const language = document.getElementById('langSelect').value;
     await fetch(`${SERVER}/burn-transcribe`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ video_path: videoPath }),
+      body: JSON.stringify({ video_path: videoPath, language }),
     });
     pollBurnStatus('transcribe');
   } catch(e) {

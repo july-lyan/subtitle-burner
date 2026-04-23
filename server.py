@@ -30,12 +30,14 @@ def _save_srt(segments, srt_path):
             f.write(f"{i}\n{fmt(seg['start'])} --> {fmt(seg['end'])}\n{seg['text']}\n\n")
 
 
-def _burn_transcribe(video_path):
+def _burn_transcribe(video_path, language="zh"):
     """后台线程：Whisper 转写视频，返回 segments"""
     global burn_state
     try:
         # 检查是否有缓存的 SRT，有则直接加载跳过 Whisper
-        srt_path = os.path.splitext(video_path)[0] + ".srt"
+        # 非中文语言用 .en.srt / .ja.srt 区分缓存
+        srt_suffix = f".{language}.srt" if language != "zh" else ".srt"
+        srt_path = os.path.splitext(video_path)[0] + srt_suffix
         if os.path.exists(srt_path):
             import re
             segments = []
@@ -73,10 +75,15 @@ def _burn_transcribe(video_path):
         burn_state = {"state": "processing", "message": "Whisper 转写中（faster-whisper）..."}
         from faster_whisper import WhisperModel
         import shutil
-        PROMPT = "以下是一段中文口播视频，内容关于AI、科技和创业。常见词汇：MCP、Anthropic、Claude、Vibecoding、API、AI、大模型、小红书、公众号、USB-C、协议、工具调用、智能体、agent、产品经理、一人公司。"
+        PROMPTS = {
+            "zh": "以下是一段中文口播视频，内容关于AI、科技和创业。常见词汇：MCP、Anthropic、Claude、Vibecoding、API、AI、大模型、小红书、公众号、USB-C、协议、工具调用、智能体、agent、产品经理、一人公司。",
+            "en": "This is a video about AI, technology and entrepreneurship. Common terms: MCP, Anthropic, Claude, Vibecoding, API, AI, large language model, agent, product manager.",
+            "ja": "これはAI、テクノロジー、起業に関する動画です。よく使われる用語：MCP、Anthropic、Claude、API、AI、大規模言語モデル。",
+        }
+        prompt = PROMPTS.get(language, PROMPTS["zh"])
         model = WhisperModel("medium", device="cpu", compute_type="int8")
-        fw_segs, _ = model.transcribe(audio_path, language="zh",
-            initial_prompt=PROMPT, vad_filter=True, word_timestamps=True)
+        fw_segs, _ = model.transcribe(audio_path, language=language,
+            initial_prompt=prompt, vad_filter=True, word_timestamps=True)
 
         # 收集所有词（带时间戳），再按自然断句重新切分
         all_words = []
@@ -127,9 +134,9 @@ def _burn_transcribe(video_path):
 
         shutil.rmtree(tmpdir, ignore_errors=True)
 
-        # 自动保存 SRT
-        srt_path = os.path.splitext(video_path)[0] + ".srt"
-        _save_srt(segments, srt_path)
+        # 自动保存 SRT（与缓存路径一致）
+        srt_save_path = os.path.splitext(video_path)[0] + srt_suffix
+        _save_srt(segments, srt_save_path)
 
         burn_state = {"state": "done", "message": f"转写完成，共 {len(segments)} 句", "segments": segments, "srt_path": srt_path}
     except Exception as e:
@@ -384,12 +391,15 @@ class BurnHandler(BaseHTTPRequestHandler):
                 self._json_response({"error": "无效的 JSON"}, 400)
                 return
             video_path = req.get("video_path", "")
+            language = req.get("language", "zh")
+            if language not in ("zh", "en", "ja"):
+                language = "zh"
             if not video_path or not os.path.exists(video_path):
                 self._json_response({"error": f"文件不存在: {video_path}"}, 400)
                 return
             global burn_state
             burn_state = {"state": "processing", "message": "转写中..."}
-            t = threading.Thread(target=_burn_transcribe, args=(video_path,), daemon=True)
+            t = threading.Thread(target=_burn_transcribe, args=(video_path, language), daemon=True)
             t.start()
             self._json_response({"status": "started"})
 
